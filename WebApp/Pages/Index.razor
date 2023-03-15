@@ -1,0 +1,81 @@
+﻿@page "/"
+@using WebClientApp.ApiServices;
+@using WebClientApp.Models;
+@using Microsoft.AspNetCore.SignalR.Client;
+@using System.Linq;
+@inject IPersonApiService personApiService
+
+@code {
+    //clients and hub
+    private const string webAppClient = nameof(webAppClient);
+    const string consoleClient = nameof(consoleClient);
+    const string hubUser = nameof(hubUser);
+    //message strings
+    private string sentMessage = string.Empty;
+    private string recievedMessage = string.Empty;
+    private string recievedFromClient = string.Empty;
+    private string fromHub = string.Empty;
+
+    private HubConnection? hubConnection =
+    new HubConnectionBuilder()
+            .WithUrl("https://localhost:7143/personhub")
+            .Build();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var httpClient = new HttpClient();
+        httpClient.BaseAddress = new Uri("https://localhost:7143");
+        var response = await httpClient.GetAsync("/people");
+        var people = await response.Content.ReadFromJsonAsync<Person[]>();
+
+        hubConnection.On("Receive", async Task (string user, string message, string fromHub) =>
+        {
+            recievedFromClient = user;
+            this.fromHub = fromHub;
+            recievedMessage = message;
+
+            StateHasChanged();
+        });
+        await hubConnection.StartAsync();
+   
+
+
+    }
+
+    async Task SendMessage()
+    {
+        await hubConnection.InvokeAsync("SendMessage", webAppClient, sentMessage);
+        StateHasChanged();
+    }
+}
+
+<PageTitle>SingalR Test</PageTitle>
+
+@if (hubConnection is null)
+{
+    <h1>HubConnection could not connect...</h1>
+}
+else
+{
+    <h1>SignalR Test</h1>
+    <EditForm OnValidSubmit="@SendMessage" Model="@sentMessage">
+        <input @bind-value="sentMessage" />
+        <button type="submit" asp-page-handler="SendMessage" onclick="@SendMessage">
+            Send Message
+        </button>
+    </EditForm>
+    <h1>My Message: @sentMessage</h1>
+    <h1>From Hub: @fromHub</h1>
+    <h1>Last message from any client: @recievedMessage</h1>
+    <h1>Recieved from Client: @recievedFromClient</h1>
+}
+
+
+
+
+
+
+
+
+
+
